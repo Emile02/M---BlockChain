@@ -15,6 +15,7 @@ export async function tokenizeAsset(
       currency: assetData.currency,
       description: assetData.description.substring(0, 100), // Limiter la taille
       timestamp: new Date().toISOString(),
+      owner: wallet.address,
     };
 
     const assetURI = convertStringToHex(JSON.stringify(simplifiedData));
@@ -31,7 +32,6 @@ export async function tokenizeAsset(
     // Approche en deux étapes
     console.log("Préparation de la transaction...");
     const prepared = await client.autofill(transactionBlob);
-
     console.log("Signature de la transaction...");
     const signed = wallet.sign(prepared);
 
@@ -98,6 +98,9 @@ export async function getTokenizedAssets(
     });
 
     console.log(`${nfts.result.account_nfts.length} NFTs trouvés`);
+    if (nfts.result.account_nfts.length > 0 ) {
+      console.log(`${Object.keys(nfts.result)}`)
+    }
 
     // Parse NFT data to extract asset information
     const assets = nfts.result.account_nfts

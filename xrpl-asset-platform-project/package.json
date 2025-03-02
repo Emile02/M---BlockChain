@@ -14,10 +14,15 @@
     "@mantine/hooks": "^7.17.0",
     "@mantine/notifications": "^7.17.0",
     "@tabler/icons-react": "^3.30.0",
+    "axios": "^1.8.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "lodash": "^4.17.21",
     "next": "15.2.0",
     "next-themes": "^0.4.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "sqlite3": "^5.1.7",
     "xrpl": "^4.2.0"
   },
   "devDependencies": {

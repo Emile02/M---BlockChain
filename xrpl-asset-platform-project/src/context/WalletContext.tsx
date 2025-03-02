@@ -2,9 +2,10 @@
 
 import { ReactNode, createContext, useContext, useState, useEffect } from "react";
 import { getClient, disconnectClient } from "../lib/xrpl/client";
-import { createTestWallet, getAccountBalance } from "../lib/xrpl/wallet";
+import {createTestWallet, getAccountBalance, getAccountWallet} from "../lib/xrpl/wallet";
 import { Client } from "xrpl";
 import { Wallet, WalletContextType } from "../types";
+import axios from 'axios';
 
 const WalletContext = createContext<WalletContextType>({
   client: null,
@@ -55,6 +56,7 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
     fetchBalance();
   }, [client, wallet]);
 
+
   // Connect to the XRPL
   const connectToXRPL = async (): Promise<boolean> => {
     try {
@@ -65,6 +67,8 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
       const newClient = await getClient();
       setClient(newClient);
       setConnected(true);
+
+      // await axios.post('http://localhost:3000/sessions/add')
 
       return true;
     } catch (err: any) {
@@ -90,6 +94,12 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
       const newWallet = await createTestWallet(client);
       setWallet(newWallet);
 
+      console.log("Connected");
+      console.log('newWallet', newWallet.address);
+      await axios.post('http://localhost:3001/sessions/add', {
+        address: newWallet.address,  // L'adresse du wallet dans le body de la requête
+      });
+
       // Get balance
       const balance = await getAccountBalance(client, newWallet.address);
       setBalance(balance);
@@ -108,6 +118,14 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
   const disconnect = async (): Promise<void> => {
     try {
       if (client) {
+        console.log("Client not connected", client);
+        if (wallet) {
+          await axios.delete('http://localhost:3001/sessions/remove', {
+            data: {
+              address: wallet.address
+            }
+          });
+        }
         await disconnectClient(client);
       }
       setClient(null);

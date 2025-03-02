@@ -1,5 +1,5 @@
-import { Client, Wallet, FundWalletResponse } from 'xrpl';
-import { Wallet as WalletType } from '../../types';
+import {Client, FundWalletResponse} from 'xrpl';
+import {Wallet as WalletType} from '../../types';
 
 // Create a new test wallet with funds from the Testnet faucet
 export async function createTestWallet(client: Client): Promise<WalletType> {

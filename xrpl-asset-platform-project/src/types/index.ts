@@ -20,6 +20,7 @@ export interface Asset {
   imageUrl?: string;
   attributes: AssetAttribute[];
   createdAt?: string;
+  owner?: string;
 }
 
 export interface TokenizationResult {
