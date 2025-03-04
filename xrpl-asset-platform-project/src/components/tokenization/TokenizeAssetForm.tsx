@@ -93,7 +93,7 @@ export default function TokenizeAssetForm(): JSX.Element {
       setError("Portefeuille non connecté. Veuillez vous connecter d'abord.");
       return;
     }
-
+    console.log('formValues', values)
     try {
       setLoading(true);
       setError(null);
@@ -104,12 +104,15 @@ export default function TokenizeAssetForm(): JSX.Element {
         ...values,
         createdAt: new Date().toISOString(),
       };
+      console.log('assetDataWithTimestamp', assetDataWithTimestamp)
 
       const result = await tokenizeAsset(
         client,
         wallet,
         assetDataWithTimestamp
       );
+
+      console.log('result', result);
 
       if (result.success && result.tokenId) {
         setSuccess(true);

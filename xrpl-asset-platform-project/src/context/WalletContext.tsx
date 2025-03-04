@@ -96,7 +96,7 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
 
       console.log("Connected");
       console.log('newWallet', newWallet.address);
-      await axios.post('http://localhost:3001/sessions/add', {
+      await axios.post('http://localhost:8000/sessions/add', {
         address: newWallet.address,  // L'adresse du wallet dans le body de la requête
       });
 
@@ -120,7 +120,7 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
       if (client) {
         console.log("Client not connected", client);
         if (wallet) {
-          await axios.delete('http://localhost:3001/sessions/remove', {
+          await axios.delete('http://localhost:8000/sessions/remove', {
             data: {
               address: wallet.address
             }

@@ -13,6 +13,7 @@ export async function tokenizeAsset(
       type: assetData.type,
       value: assetData.value,
       currency: assetData.currency,
+      imageUrl: assetData.imageUrl,
       description: assetData.description.substring(0, 100), // Limiter la taille
       timestamp: new Date().toISOString(),
       owner: wallet.address,

@@ -4,8 +4,6 @@ import { useWallet } from '../../context/WalletContext';
 import { getTokenizedAssets } from '../../lib/xrpl/tokenization';
 import { Asset } from '../../types';
 import axios from "axios";
-import _ from 'lodash';
-import { Client, Wallet, Amount, OfferCreate } from 'xrpl';
 
 export default function TokenGallery() {
   const { client, connected, wallet } = useWallet();
@@ -15,17 +13,7 @@ export default function TokenGallery() {
   const [selectedToken, setSelectedToken] = useState<Asset | null>(null);
   const [amountToTrade, setAmountToTrade] = useState("");
   const [currencyToReceive, setCurrencyToReceive] = useState("XRP");
-
-  async function getActiveAccounts(): Promise<string[]> {
-    try {
-      const response = await fetch("/api/sessions");
-      const data = await response.json();
-      return data.activeAccounts || [];
-    } catch (error) {
-      console.error("Erreur lors de la récupération des comptes actifs :", error);
-      return [];
-    }
-  }
+  const [expandedToken, setExpandedToken] = useState<string | null>(null); // Suivi du token sélectionné pour l'expansion
 
   useEffect(() => {
     async function loadTokens() {
@@ -33,7 +21,7 @@ export default function TokenGallery() {
 
       setLoading(true);
       try {
-        const accounts = await axios.get('http://localhost:3001/sessions/all');
+        const accounts = await axios.get('http://localhost:8000/sessions/all');
         const allTokensRequests = [];
 
         for (const account of accounts.data.accounts) {
@@ -111,8 +99,6 @@ export default function TokenGallery() {
     }
   }
 
-
-
   if (loading) {
     return (
         <Grid>
@@ -137,20 +123,20 @@ export default function TokenGallery() {
       <>
         <Grid>
           {tokens.map((token) => (
-              <Grid.Col key={token.tokenId} span={{ base: 12, sm: 6, md: 4, lg: 3 }}>
-                <Card shadow="sm" padding="lg" radius="md" withBorder>
+              <Grid.Col key={token.tokenId} span={expandedToken === token.tokenId ? 6 : { base: 12, sm: 6, md: 4, lg: 3 }}> {/* Agrandit la carte lorsque le token est sélectionné */}
+                <Card shadow="sm" padding="lg" radius="md" withBorder style={{ height: expandedToken === token.tokenId ? 'auto' : '400px' }}>
                   <Card.Section>
                     {token.imageUrl ? (
                         <Image
                             src={token.imageUrl}
-                            height={160}
+                            height={expandedToken === token.tokenId ? 300 : 160} // Agrandir l'image quand la carte est agrandie
                             alt={token.name}
                             fallbackSrc="https://placehold.co/400x200?text=Asset+Image"
                         />
                     ) : (
                         <Image
                             src={`https://placehold.co/400x200?text=${token.name}`}
-                            height={160}
+                            height={expandedToken === token.tokenId ? 300 : 160}
                             alt={token.name}
                         />
                     )}
@@ -163,22 +149,30 @@ export default function TokenGallery() {
                     </Badge>
                   </Group>
 
-                  <Text size="sm" c="dimmed" lineClamp={2}>
+                  <Text size="sm" c="dimmed" lineClamp={expandedToken === token.tokenId ? undefined : 2}>
                     {token.description || "Pas de description disponible"}
                   </Text>
+
+                  {expandedToken === token.tokenId && (
+                      <>
+                        <Text size="sm" c="dimmed" mt="md">
+                          Token ID: {token.tokenId}
+                        </Text>
+                        <Text size="sm" c="dimmed" mt="md">
+                          Propriétaire: {token.owner}
+                        </Text>
+                        {/* Ajouter d'autres champs si nécessaire */}
+                      </>
+                  )}
 
                   <Group mt="md" justify="space-between">
                     <Text fw={700}>
                       {token.value} {token.currency}
                     </Text>
-                    <Button variant="light" color="blue">
-                      Voir les détails
+                    <Button variant="light" color="blue" onClick={() => setExpandedToken(expandedToken === token.tokenId ? null : token.tokenId)}>
+                      {expandedToken === token.tokenId ? "Réduire" : "Voir les détails"}
                     </Button>
                   </Group>
-
-                  <Text size="xs" c="dimmed" mt="sm">
-                    Token ID: {token.tokenId.substring(0, 8)}...
-                  </Text>
 
                   {/* Ajouter un bouton Trade si le token ne m'appartient pas */}
                   {wallet && token.owner !== wallet.address && (
@@ -219,7 +213,6 @@ export default function TokenGallery() {
           />
           <Group position="right" mt="md">
             <Button variant="light" color="green" mt="md" onClick={() => proposeTrade(selectedToken!!, '10', 'USD')}>Trade</Button>
-
           </Group>
         </Modal>
       </>
