@@ -1,4 +1,5 @@
-import { Client, convertStringToHex, NFTokenMint } from "xrpl";
+// src/lib/xrpl/tokenization.ts
+import { Client, convertStringToHex } from "xrpl";
 import { Asset, TokenizationResult, Wallet } from "../../types";
 
 export async function tokenizeAsset(
@@ -7,54 +8,62 @@ export async function tokenizeAsset(
   assetData: Asset
 ): Promise<TokenizationResult> {
   try {
-    // Simplifier les données pour éviter les problèmes de taille
-    const simplifiedData = {
-      name: assetData.name,
+    // Store minimal metadata to prevent oversized URIs (max 256 bytes)
+    const minimalMetadata = {
+      name: assetData.name.substring(0, 50), // Limit name length
       type: assetData.type,
-      value: assetData.value,
-      currency: assetData.currency,
-      imageUrl: assetData.imageUrl,
-      description: assetData.description.substring(0, 100), // Limiter la taille
-      timestamp: new Date().toISOString(),
-      owner: wallet.address,
+      description: assetData.description
+        ? assetData.description.substring(0, 100)
+        : "", // Limit description
+      imageUrl: assetData.imageUrl || "",
     };
 
-    const assetURI = convertStringToHex(JSON.stringify(simplifiedData));
+    // Convert metadata to hex - keeping it small
+    const metadataHex = convertStringToHex(JSON.stringify(minimalMetadata));
 
-    // Créer la transaction avec le type correct
-    const transactionBlob: NFTokenMint = {
-      TransactionType: "NFTokenMint", // Doit être exactement cette chaîne littérale
-      Account: wallet.address,
-      NFTokenTaxon: 0,
-      Flags: 8, // Valeur numérique pour tfTransferable
-      URI: assetURI,
-    };
-
-    // Approche en deux étapes
-    console.log("Préparation de la transaction...");
-    const prepared = await client.autofill(transactionBlob);
-    console.log("Signature de la transaction...");
-    const signed = wallet.sign(prepared);
-
-    console.log("Soumission de la transaction...");
-    const tx_blob = signed.tx_blob;
-    const result = await client.submit(tx_blob);
-
-    console.log("Résultat:", result);
-
-    if (
-      result.result.engine_result !== "tesSUCCESS" &&
-      result.result.engine_result !== "terQUEUED"
-    ) {
+    // Check if the hex is within size limits (256 bytes)
+    if (metadataHex.length > 512) {
+      // 512 hex chars = 256 bytes
       throw new Error(
-        `Transaction échouée: ${result.result.engine_result_message}`
+        "Metadata too large. Please reduce the description or remove some fields."
       );
     }
 
-    // Attendre que la transaction soit validée
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    // Create the transaction BLOB
+    const transactionBlob = {
+      TransactionType: "NFTokenMint",
+      Account: wallet.address,
+      NFTokenTaxon: 0,
+      Flags: 8, // tfTransferable
+      URI: metadataHex,
+      Fee: "12", // Ensure we specify a reasonable fee
+    };
 
-    // Récupérer les NFTs
+    console.log("Preparing NFT minting transaction:", transactionBlob);
+
+    // Autofill the transaction details (sequence, fee, etc.)
+    const prepared = await client.autofill(transactionBlob);
+
+    // Sign the transaction
+    const signed = wallet.sign(prepared);
+
+    // Submit the transaction
+    console.log("Submitting transaction...");
+    const tx = await client.submitAndWait(signed.tx_blob);
+
+    console.log("Transaction result:", tx.result.meta.TransactionResult);
+
+    // Check transaction result
+    if (tx.result.meta.TransactionResult !== "tesSUCCESS") {
+      throw new Error(
+        `Transaction failed: ${tx.result.meta.TransactionResult}`
+      );
+    }
+
+    // Wait briefly before querying for the new token
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Get the NFTs for this account
     const nftsResponse = await client.request({
       command: "account_nfts",
       account: wallet.address,
@@ -64,20 +73,30 @@ export async function tokenizeAsset(
       !nftsResponse.result.account_nfts ||
       nftsResponse.result.account_nfts.length === 0
     ) {
-      throw new Error("Aucun NFT trouvé");
+      throw new Error("No NFTs found after minting");
     }
 
-    // Prendre le dernier NFT créé
+    // Get the latest NFT (assuming it's the one we just minted)
     const nfts = nftsResponse.result.account_nfts;
     const lastNFT = nfts[nfts.length - 1];
+
+    // Now store complete asset data by updating the in-memory representation
+    // We can associate the asset data with the NFT ID in a database or local storage
+    const completeAsset = {
+      ...assetData,
+      tokenId: lastNFT.NFTokenID,
+    };
+
+    // This would be where you'd store the complete asset data in a database
+    console.log("Tokenized asset:", completeAsset);
 
     return {
       success: true,
       tokenId: lastNFT.NFTokenID,
-      txid: result.result.tx_json.hash,
+      txid: tx.result.hash,
     };
   } catch (error: unknown) {
-    console.error("Erreur complète:", error);
+    console.error("Error tokenizing asset:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),
@@ -90,59 +109,70 @@ export async function getTokenizedAssets(
   address: string
 ): Promise<Array<Asset & { tokenId: string }>> {
   try {
-    console.log(`Récupération des NFTs pour le compte ${address}...`);
+    console.log(`Retrieving NFTs for account ${address}...`);
 
     const nfts = await client.request({
       command: "account_nfts",
       account: address,
-      limit: 400, // Augmenter la limite pour récupérer plus de tokens
+      limit: 400, // Increase limit to retrieve more tokens
     });
 
-    console.log(`${nfts.result.account_nfts.length} NFTs trouvés`);
-    if (nfts.result.account_nfts.length > 0 ) {
-      console.log(`${Object.keys(nfts.result)}`)
-    }
+    console.log(`${nfts.result.account_nfts.length} NFTs found`);
 
     // Parse NFT data to extract asset information
     const assets = nfts.result.account_nfts
-      .filter((nft) => nft.URI) // Filtrer les NFTs sans URI
+      .filter((nft) => nft.URI) // Filter NFTs without URI
       .map((nft) => {
         try {
           const hexURI = nft.URI;
           if (!hexURI) {
             throw new Error("URI is undefined");
           }
+
           const rawData = Buffer.from(hexURI, "hex").toString("utf8");
 
           try {
-            // Essayer de parser les données JSON
-            const assetData = JSON.parse(rawData) as Asset;
+            // Try to parse the JSON data
+            const parsedData = JSON.parse(rawData);
 
+            // Build a complete asset with default values for missing fields
             return {
               tokenId: nft.NFTokenID,
-              ...assetData,
-            };
-          } catch {
-            // Si le parsing JSON échoue, utiliser les données brutes
+              name:
+                parsedData.name || `Token ${nft.NFTokenID.substring(0, 8)}...`,
+              type: parsedData.type || "Unknown",
+              description: parsedData.description || "",
+              value: parsedData.value || 0,
+              currency: parsedData.currency || "XRP",
+              imageUrl: parsedData.imageUrl || "",
+              owner: address, // Set owner to the current address
+              attributes: parsedData.attributes || [],
+              location: parsedData.location || "",
+              backgroundColor: parsedData.backgroundColor || "#ffffff",
+            } as Asset & { tokenId: string };
+          } catch (parseError) {
+            // If JSON parsing fails, use raw data
             return {
               tokenId: nft.NFTokenID,
               name: `Token ${nft.NFTokenID.substring(0, 8)}...`,
               type: "Unknown",
-              description: `Données brutes: ${rawData.substring(0, 50)}...`,
+              description: `Raw data: ${rawData.substring(0, 50)}...`,
               value: 0,
               currency: "XRP",
+              owner: address,
               attributes: [],
             } as Asset & { tokenId: string };
           }
         } catch (err) {
-          console.error("Erreur lors du décodage des données du NFT:", err);
+          console.error("Error decoding NFT data:", err);
           return {
             tokenId: nft.NFTokenID,
             name: `Token ${nft.NFTokenID.substring(0, 8)}...`,
             type: "Unknown",
-            description: "Impossible de décoder les données du token",
+            description: "Unable to decode token data",
             value: 0,
             currency: "XRP",
+            owner: address,
             attributes: [],
           } as Asset & { tokenId: string };
         }
@@ -150,7 +180,7 @@ export async function getTokenizedAssets(
 
     return assets;
   } catch (error) {
-    console.error("Erreur lors de la récupération des tokens:", error);
+    console.error("Error retrieving tokens:", error);
     return [];
   }
 }

@@ -1,12 +1,36 @@
 "use client";
 
-import { ReactNode, createContext, useContext, useState, useEffect } from "react";
-import { getClient, disconnectClient } from "../lib/xrpl/client";
-import {createTestWallet, getAccountBalance, getAccountWallet} from "../lib/xrpl/wallet";
+import axios from "axios";
+import {
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { Client } from "xrpl";
-import { Wallet, WalletContextType } from "../types";
-import axios from 'axios';
+import { disconnectClient, getClient } from "../lib/xrpl/client";
+import { getTokenizedAssets, tokenizeAsset } from "../lib/xrpl/tokenization";
+import {
+  acceptOffer,
+  cancelOffer,
+  createBuyOffer,
+  createSellOffer,
+  getAccountOffers,
+  getBuyOffers,
+  getSellOffers,
+  OfferType,
+} from "../lib/xrpl/trading";
+import { createTestWallet, getAccountBalance } from "../lib/xrpl/wallet";
+import {
+  Asset,
+  TokenizationResult,
+  TradingResponse,
+  Wallet,
+  WalletContextType,
+} from "../types";
 
+// Create context with enhanced functionality
 const WalletContext = createContext<WalletContextType>({
   client: null,
   wallet: null,
@@ -17,6 +41,17 @@ const WalletContext = createContext<WalletContextType>({
   connectToXRPL: async () => false,
   createWallet: async () => false,
   disconnect: async () => {},
+  // New methods
+  tokenizeAsset: async () => ({ success: false, error: "Not implemented" }),
+  getAssets: async () => [],
+  createSellOffer: async () => ({ success: false, error: "Not implemented" }),
+  createBuyOffer: async () => ({ success: false, error: "Not implemented" }),
+  acceptOffer: async () => ({ success: false, error: "Not implemented" }),
+  cancelOffer: async () => ({ success: false, error: "Not implemented" }),
+  getSellOffers: async () => [],
+  getBuyOffers: async () => [],
+  getAccountOffers: async () => [],
+  batchMintNFTs: async () => ({ success: false, error: "Not implemented" }),
 });
 
 export function useWallet(): WalletContextType {
@@ -56,7 +91,6 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
     fetchBalance();
   }, [client, wallet]);
 
-
   // Connect to the XRPL
   const connectToXRPL = async (): Promise<boolean> => {
     try {
@@ -67,8 +101,6 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
       const newClient = await getClient();
       setClient(newClient);
       setConnected(true);
-
-      // await axios.post('http://localhost:3000/sessions/add')
 
       return true;
     } catch (err: any) {
@@ -95,9 +127,9 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
       setWallet(newWallet);
 
       console.log("Connected");
-      console.log('newWallet', newWallet.address);
-      await axios.post('http://localhost:8000/sessions/add', {
-        address: newWallet.address,  // L'adresse du wallet dans le body de la requête
+      console.log("newWallet", newWallet.address);
+      await axios.post("http://localhost:8000/sessions/add", {
+        address: newWallet.address, // L'adresse du wallet dans le body de la requête
       });
 
       // Get balance
@@ -107,7 +139,9 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
       return true;
     } catch (err: any) {
       console.error("Error creating wallet:", err);
-      setError("Erreur lors de la création du portefeuille. Veuillez réessayer.");
+      setError(
+        "Erreur lors de la création du portefeuille. Veuillez réessayer."
+      );
       return false;
     } finally {
       setLoading(false);
@@ -118,12 +152,12 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
   const disconnect = async (): Promise<void> => {
     try {
       if (client) {
-        console.log("Client not connected", client);
+        console.log("Disconnecting client");
         if (wallet) {
-          await axios.delete('http://localhost:8000/sessions/remove', {
+          await axios.delete("http://localhost:8000/sessions/remove", {
             data: {
-              address: wallet.address
-            }
+              address: wallet.address,
+            },
           });
         }
         await disconnectClient(client);
@@ -137,6 +171,220 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
     }
   };
 
+  // =============== NEW METHODS =================
+
+  // Tokenize an asset (mint NFT)
+  const mintAsset = async (asset: Asset): Promise<TokenizationResult> => {
+    try {
+      if (!client || !wallet) {
+        return {
+          success: false,
+          error: "Wallet not connected",
+        };
+      }
+
+      return await tokenizeAsset(client, wallet, asset);
+    } catch (error: any) {
+      console.error("Error tokenizing asset:", error);
+      return {
+        success: false,
+        error: error.message || "Failed to tokenize asset",
+      };
+    }
+  };
+
+  // Get all tokenized assets (NFTs)
+  const getAssets = async (): Promise<(Asset & { tokenId: string })[]> => {
+    try {
+      if (!client || !wallet) {
+        return [];
+      }
+
+      return await getTokenizedAssets(client, wallet.address);
+    } catch (error) {
+      console.error("Error getting assets:", error);
+      return [];
+    }
+  };
+
+  // Create a sell offer for an NFT
+  const createNFTSellOffer = async (
+    tokenId: string,
+    amount: string,
+    destination?: string,
+    expirationDays?: number
+  ): Promise<TradingResponse> => {
+    try {
+      if (!client || !wallet) {
+        return {
+          success: false,
+          error: "Wallet not connected",
+        };
+      }
+
+      return await createSellOffer(
+        client,
+        wallet,
+        tokenId,
+        amount,
+        destination,
+        expirationDays
+      );
+    } catch (error: any) {
+      console.error("Error creating sell offer:", error);
+      return {
+        success: false,
+        error: error.message || "Failed to create sell offer",
+      };
+    }
+  };
+
+  // Create a buy offer for an NFT
+  const createNFTBuyOffer = async (
+    tokenId: string,
+    owner: string,
+    amount: string,
+    expirationDays?: number
+  ): Promise<TradingResponse> => {
+    try {
+      if (!client || !wallet) {
+        return {
+          success: false,
+          error: "Wallet not connected",
+        };
+      }
+
+      return await createBuyOffer(
+        client,
+        wallet,
+        tokenId,
+        owner,
+        amount,
+        expirationDays
+      );
+    } catch (error: any) {
+      console.error("Error creating buy offer:", error);
+      return {
+        success: false,
+        error: error.message || "Failed to create buy offer",
+      };
+    }
+  };
+
+  // Accept an offer (buy or sell)
+  const acceptNFTOffer = async (
+    offerIndex: string,
+    offerType: OfferType
+  ): Promise<TradingResponse> => {
+    try {
+      if (!client || !wallet) {
+        return {
+          success: false,
+          error: "Wallet not connected",
+        };
+      }
+
+      return await acceptOffer(client, wallet, offerIndex, offerType);
+    } catch (error: any) {
+      console.error("Error accepting offer:", error);
+      return {
+        success: false,
+        error: error.message || "Failed to accept offer",
+      };
+    }
+  };
+
+  // Cancel an offer
+  const cancelNFTOffer = async (
+    offerIndex: string
+  ): Promise<TradingResponse> => {
+    try {
+      if (!client || !wallet) {
+        return {
+          success: false,
+          error: "Wallet not connected",
+        };
+      }
+
+      return await cancelOffer(client, wallet, offerIndex);
+    } catch (error: any) {
+      console.error("Error cancelling offer:", error);
+      return {
+        success: false,
+        error: error.message || "Failed to cancel offer",
+      };
+    }
+  };
+
+  // Get sell offers for a token
+  const getNFTSellOffers = async (tokenId: string): Promise<any[]> => {
+    try {
+      if (!client) {
+        return [];
+      }
+
+      return await getSellOffers(client, tokenId);
+    } catch (error) {
+      console.error("Error getting sell offers:", error);
+      return [];
+    }
+  };
+
+  // Get buy offers for a token
+  const getNFTBuyOffers = async (tokenId: string): Promise<any[]> => {
+    try {
+      if (!client) {
+        return [];
+      }
+
+      return await getBuyOffers(client, tokenId);
+    } catch (error) {
+      console.error("Error getting buy offers:", error);
+      return [];
+    }
+  };
+
+  // Get all offers for an account
+  const getAccountNFTOffers = async (): Promise<any[]> => {
+    try {
+      if (!client || !wallet) {
+        return [];
+      }
+
+      return await getAccountOffers(client, wallet.address);
+    } catch (error) {
+      console.error("Error getting account offers:", error);
+      return [];
+    }
+  };
+
+  // Batch mint NFTs
+  const batchMintNFTs = async (
+    asset: Asset,
+    count: number
+  ): Promise<TokenizationResult> => {
+    try {
+      if (!client || !wallet) {
+        return {
+          success: false,
+          error: "Wallet not connected",
+        };
+      }
+
+      // For now, we'll just mint one token as a placeholder
+      // In a real implementation, this would use the batch minting technique with tickets
+      return await tokenizeAsset(client, wallet, asset);
+
+      // TODO: Implement batch minting with tickets as shown in ripplex7-batch-minting.js
+    } catch (error: any) {
+      console.error("Error batch minting NFTs:", error);
+      return {
+        success: false,
+        error: error.message || "Failed to batch mint NFTs",
+      };
+    }
+  };
+
   const value: WalletContextType = {
     client,
     wallet,
@@ -147,6 +395,17 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
     connectToXRPL,
     createWallet,
     disconnect,
+    // New methods
+    tokenizeAsset: mintAsset,
+    getAssets,
+    createSellOffer: createNFTSellOffer,
+    createBuyOffer: createNFTBuyOffer,
+    acceptOffer: acceptNFTOffer,
+    cancelOffer: cancelNFTOffer,
+    getSellOffers: getNFTSellOffers,
+    getBuyOffers: getNFTBuyOffers,
+    getAccountOffers: getAccountNFTOffers,
+    batchMintNFTs,
   };
 
   return (
