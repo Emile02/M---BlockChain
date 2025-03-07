@@ -41,7 +41,8 @@ const WalletContext = createContext<WalletContextType>({
   connectToXRPL: async () => false,
   createWallet: async () => false,
   disconnect: async () => {},
-  // New methods
+  refreshBalance: async () => {},
+  // NFT methods
   tokenizeAsset: async () => ({ success: false, error: "Not implemented" }),
   getAssets: async () => [],
   createSellOffer: async () => ({ success: false, error: "Not implemented" }),
@@ -90,6 +91,18 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
 
     fetchBalance();
   }, [client, wallet]);
+
+  // Function to refresh balance - can be called after transactions
+  const refreshBalance = async (): Promise<void> => {
+    if (client && wallet) {
+      try {
+        const newBalance = await getAccountBalance(client, wallet.address);
+        setBalance(newBalance);
+      } catch (err) {
+        console.error("Error refreshing balance:", err);
+      }
+    }
+  };
 
   // Connect to the XRPL
   const connectToXRPL = async (): Promise<boolean> => {
@@ -171,7 +184,7 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
     }
   };
 
-  // =============== NEW METHODS =================
+  // =============== NFT METHODS =================
 
   // Tokenize an asset (mint NFT)
   const mintAsset = async (asset: Asset): Promise<TokenizationResult> => {
@@ -183,7 +196,12 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
         };
       }
 
-      return await tokenizeAsset(client, wallet, asset);
+      const result = await tokenizeAsset(client, wallet, asset);
+
+      // Refresh balance after tokenization (to account for fees)
+      await refreshBalance();
+
+      return result;
     } catch (error: any) {
       console.error("Error tokenizing asset:", error);
       return {
@@ -222,7 +240,7 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
         };
       }
 
-      return await createSellOffer(
+      const result = await createSellOffer(
         client,
         wallet,
         tokenId,
@@ -230,6 +248,11 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
         destination,
         expirationDays
       );
+
+      // Refresh balance after creating offer (to account for fees)
+      await refreshBalance();
+
+      return result;
     } catch (error: any) {
       console.error("Error creating sell offer:", error);
       return {
@@ -254,7 +277,7 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
         };
       }
 
-      return await createBuyOffer(
+      const result = await createBuyOffer(
         client,
         wallet,
         tokenId,
@@ -262,6 +285,11 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
         amount,
         expirationDays
       );
+
+      // Refresh balance after creating offer (to account for fees)
+      await refreshBalance();
+
+      return result;
     } catch (error: any) {
       console.error("Error creating buy offer:", error);
       return {
@@ -284,7 +312,13 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
         };
       }
 
-      return await acceptOffer(client, wallet, offerIndex, offerType);
+      const result = await acceptOffer(client, wallet, offerIndex, offerType);
+
+      // Important: Refresh balance after accepting an offer
+      // This is crucial for showing the updated XRP amount after a trade
+      await refreshBalance();
+
+      return result;
     } catch (error: any) {
       console.error("Error accepting offer:", error);
       return {
@@ -306,7 +340,12 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
         };
       }
 
-      return await cancelOffer(client, wallet, offerIndex);
+      const result = await cancelOffer(client, wallet, offerIndex);
+
+      // Refresh balance after cancelling offer (to account for fees)
+      await refreshBalance();
+
+      return result;
     } catch (error: any) {
       console.error("Error cancelling offer:", error);
       return {
@@ -373,7 +412,12 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
 
       // For now, we'll just mint one token as a placeholder
       // In a real implementation, this would use the batch minting technique with tickets
-      return await tokenizeAsset(client, wallet, asset);
+      const result = await tokenizeAsset(client, wallet, asset);
+
+      // Refresh balance after minting (to account for fees)
+      await refreshBalance();
+
+      return result;
 
       // TODO: Implement batch minting with tickets as shown in ripplex7-batch-minting.js
     } catch (error: any) {
@@ -395,7 +439,8 @@ export function WalletProvider({ children }: WalletProviderProps): JSX.Element {
     connectToXRPL,
     createWallet,
     disconnect,
-    // New methods
+    refreshBalance,
+    // NFT methods
     tokenizeAsset: mintAsset,
     getAssets,
     createSellOffer: createNFTSellOffer,

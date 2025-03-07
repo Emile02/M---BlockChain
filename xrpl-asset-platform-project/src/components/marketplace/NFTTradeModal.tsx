@@ -40,14 +40,16 @@ interface NFTTradeModalProps {
   opened: boolean;
   onClose: () => void;
   asset: (Asset & { tokenId: string }) | null;
+  onSuccessfulTrade?: () => void; // New callback for successful trades
 }
 
 export default function NFTTradeModal({
   opened,
   onClose,
   asset,
+  onSuccessfulTrade,
 }: NFTTradeModalProps) {
-  const { client, wallet } = useWallet();
+  const { client, wallet, refreshBalance } = useWallet();
   const [activeTab, setActiveTab] = useState<string | null>("sell");
   const [amount, setAmount] = useState<string>("");
   const [destination, setDestination] = useState<string>("");
@@ -138,6 +140,14 @@ export default function NFTTradeModal({
       if (result.success) {
         setSuccess(true);
         setTradeResult(result);
+
+        // Refresh balance after creating a sell offer
+        await refreshBalance();
+
+        // Notify parent component about successful trade
+        if (onSuccessfulTrade) {
+          onSuccessfulTrade();
+        }
       } else {
         setError(result.error || "Failed to create sell offer");
       }
@@ -184,6 +194,14 @@ export default function NFTTradeModal({
       if (result.success) {
         setSuccess(true);
         setTradeResult(result);
+
+        // Refresh balance after creating a buy offer
+        await refreshBalance();
+
+        // Notify parent component about successful trade
+        if (onSuccessfulTrade) {
+          onSuccessfulTrade();
+        }
       } else {
         setError(result.error || "Failed to create buy offer");
       }
@@ -212,6 +230,14 @@ export default function NFTTradeModal({
       if (result.success) {
         setSuccess(true);
         setTradeResult(result);
+
+        // Important: Refresh balance after accepting an offer
+        await refreshBalance();
+
+        // Notify parent component about successful trade to refresh ALL accounts
+        if (onSuccessfulTrade) {
+          onSuccessfulTrade();
+        }
       } else {
         setError(result.error || "Failed to accept offer");
       }

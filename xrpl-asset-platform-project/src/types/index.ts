@@ -25,6 +25,12 @@ export interface Asset {
   backgroundColor?: string;
   owner: string;
   attributes: Attribute[];
+  createdAt?: string;
+}
+
+export interface AssetAttribute {
+  trait_type: string;
+  value: string;
 }
 
 export interface TokenizationResult {
@@ -52,8 +58,9 @@ export interface WalletContextType {
   connectToXRPL: () => Promise<boolean>;
   createWallet: () => Promise<boolean>;
   disconnect: () => Promise<void>;
+  refreshBalance: () => Promise<void>; // Added method to refresh balance
 
-  // New methods
+  // NFT methods
   tokenizeAsset: (asset: Asset) => Promise<TokenizationResult>;
   getAssets: () => Promise<(Asset & { tokenId: string })[]>;
   createSellOffer: (
@@ -77,4 +84,40 @@ export interface WalletContextType {
   getBuyOffers: (tokenId: string) => Promise<any[]>;
   getAccountOffers: () => Promise<any[]>;
   batchMintNFTs: (asset: Asset, count: number) => Promise<TokenizationResult>;
+}
+
+export enum FeedbackCategory {
+  BUG = "bug",
+  FEATURE = "feature",
+  EXPERIENCE = "experience",
+  OTHER = "other",
+}
+
+// Type pour les données de feedback
+export interface Feedback {
+  id?: string; // ID unique généré par le système
+  userId?: string; // ID ou adresse du portefeuille de l'utilisateur
+  category: string; // Catégorie du feedback (utiliser FeedbackCategory)
+  subject: string; // Sujet/titre du feedback
+  message: string; // Contenu détaillé du feedback
+  rating: number; // Note donnée par l'utilisateur (1-5)
+  email?: string; // Email optionnel pour le contact
+  createdAt: Date | string; // Date de création du feedback
+  status?: FeedbackStatus; // Statut du traitement
+  adminResponse?: string; // Réponse éventuelle de l'admin
+}
+
+// Enumération des statuts de feedback
+export enum FeedbackStatus {
+  NEW = "new", // Nouveau feedback non traité
+  IN_REVIEW = "in_review", // Feedback en cours d'examen
+  COMPLETED = "completed", // Feedback traité
+  REJECTED = "rejected", // Feedback rejeté (spam, etc.)
+}
+
+// Type pour les réponses de l'API de feedback
+export interface FeedbackApiResponse {
+  success: boolean;
+  message: string;
+  data?: any;
 }

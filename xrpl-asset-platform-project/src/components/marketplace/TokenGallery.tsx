@@ -1,4 +1,4 @@
-// src/components/marketplace/TokenGallery.tsx - Avec rafraîchissement amélioré
+// src/components/marketplace/TokenGallery.tsx
 import {
   Alert,
   Badge,
@@ -20,7 +20,7 @@ import { Asset } from "../../types";
 import NFTTradeModal from "./NFTTradeModal";
 
 export default function TokenGallery() {
-  const { client, connected, wallet } = useWallet();
+  const { client, connected, wallet, refreshBalance } = useWallet();
   const [tokens, setTokens] = useState<(Asset & { tokenId: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +30,7 @@ export default function TokenGallery() {
   >(null);
   const [expandedToken, setExpandedToken] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [accounts, setAccounts] = useState<any[]>([]);
 
   // Transformation de loadTokens en useCallback pour pouvoir l'utiliser dans les gestionnaires d'événements
   const loadTokens = useCallback(async () => {
@@ -40,11 +41,16 @@ export default function TokenGallery() {
 
     try {
       // Récupérer tous les comptes depuis votre serveur backend
-      const accounts = await axios.get("http://localhost:8000/sessions/all");
+      const accountsResponse = await axios.get(
+        "http://localhost:8000/sessions/all"
+      );
+      const allAccounts = accountsResponse.data.accounts;
+      setAccounts(allAccounts);
+
       const allTokensRequests = [];
 
       // Pour chaque compte, récupérer ses NFTs
-      for (const account of accounts.data.accounts) {
+      for (const account of allAccounts) {
         allTokensRequests.push(getTokenizedAssets(client, account.address));
       }
 
@@ -68,13 +74,18 @@ export default function TokenGallery() {
 
       setTokens(allTokens);
       setLastRefresh(new Date());
+
+      // Also refresh current user's balance
+      if (wallet) {
+        await refreshBalance();
+      }
     } catch (error) {
       console.error("Erreur lors du chargement des tokens:", error);
       setError("Failed to load tokenized assets. Please try again later.");
     } finally {
       setLoading(false);
     }
-  }, [client, connected, wallet]);
+  }, [client, connected, wallet, refreshBalance]);
 
   // Charger les tokens au chargement du composant et lorsque wallet ou client change
   useEffect(() => {
@@ -88,7 +99,7 @@ export default function TokenGallery() {
 
   const handleCloseTradeModal = () => {
     setTradeModalOpen(false);
-    // Rafraîchir les tokens après une transaction
+    // Refresh everything after a transaction
     loadTokens();
   };
 
@@ -407,6 +418,7 @@ export default function TokenGallery() {
         opened={tradeModalOpen}
         onClose={handleCloseTradeModal}
         asset={selectedToken}
+        onSuccessfulTrade={loadTokens} // Add callback to refresh after trade
       />
     </>
   );

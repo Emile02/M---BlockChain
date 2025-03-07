@@ -31,7 +31,7 @@ import { useWallet } from "../../context/WalletContext";
 import { tokenizeAsset } from "../../lib/xrpl/tokenization";
 import { Asset, AssetAttribute } from "../../types";
 
-interface FormValues extends Omit<Asset, 'attributes'> {
+interface FormValues extends Omit<Asset, "attributes" | "owner"> {
   attributes: AssetAttribute[];
 }
 
@@ -65,7 +65,7 @@ export default function TokenizeAssetForm(): JSX.Element {
       description: "",
       type: "Real Estate",
       value: 0,
-      currency: "USD",
+      currency: "XRP", // Default to XRP to avoid potential issues
       location: "",
       imageUrl: "",
       attributes: [],
@@ -93,26 +93,46 @@ export default function TokenizeAssetForm(): JSX.Element {
       setError("Portefeuille non connecté. Veuillez vous connecter d'abord.");
       return;
     }
-    console.log('formValues', values)
+
     try {
       setLoading(true);
       setError(null);
       setSuccess(false);
 
-      // Ajouter un timestamp aux données de l'actif
-      const assetDataWithTimestamp: Asset = {
-        ...values,
-        createdAt: new Date().toISOString(),
-      };
-      console.log('assetDataWithTimestamp', assetDataWithTimestamp)
-
-      const result = await tokenizeAsset(
-        client,
-        wallet,
-        assetDataWithTimestamp
+      // Add required owner field and filter out empty attributes
+      const filteredAttributes = values.attributes.filter(
+        (attr) => attr.trait_type.trim() !== "" && attr.value.trim() !== ""
       );
 
-      console.log('result', result);
+      // Create a properly formatted asset with owner field
+      const assetData: Asset = {
+        ...values,
+        owner: wallet.address, // Add the required owner field
+        attributes: filteredAttributes,
+      };
+
+      console.log("Tokenizing asset with data:", assetData);
+
+      // Keep the metadata small to avoid "Malformed transaction" errors
+      // Only include essential fields for the URI
+      const minimalAsset: Asset = {
+        name: assetData.name.substring(0, 50), // Limit name length
+        description: assetData.description.substring(0, 100), // Limit description
+        type: assetData.type,
+        value: assetData.value,
+        currency: assetData.currency,
+        imageUrl: assetData.imageUrl
+          ? assetData.imageUrl.substring(0, 100)
+          : "", // Limit URL length
+        owner: wallet.address,
+        attributes: filteredAttributes.slice(0, 3), // Limit number of attributes
+        location: assetData.location ? assetData.location.substring(0, 50) : "", // Limit location length
+      };
+
+      // Call the tokenization function with the minimal asset data
+      const result = await tokenizeAsset(client, wallet, minimalAsset);
+
+      console.log("Tokenization result:", result);
 
       if (result.success && result.tokenId) {
         setSuccess(true);
@@ -122,7 +142,10 @@ export default function TokenizeAssetForm(): JSX.Element {
         setError(result.error || "Une erreur inconnue s'est produite");
       }
     } catch (err: any) {
-      setError(err.message);
+      console.error("Error tokenizing asset:", err);
+      setError(
+        err.message || "Une erreur s'est produite lors de la tokenisation"
+      );
     } finally {
       setLoading(false);
     }
@@ -212,7 +235,7 @@ export default function TokenizeAssetForm(): JSX.Element {
               label="Devise"
               placeholder="Sélectionnez une devise"
               data={currencies}
-              defaultValue="USD"
+              defaultValue="XRP"
               {...form.getInputProps("currency")}
             />
           </Grid.Col>

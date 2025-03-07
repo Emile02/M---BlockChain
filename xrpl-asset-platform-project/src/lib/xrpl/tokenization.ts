@@ -8,7 +8,7 @@ export async function tokenizeAsset(
   assetData: Asset
 ): Promise<TokenizationResult> {
   try {
-    // Store minimal metadata to prevent oversized URIs (max 256 bytes)
+    // Store minimal metadata but ensure we include value and currency
     const minimalMetadata = {
       name: assetData.name.substring(0, 50), // Limit name length
       type: assetData.type,
@@ -16,6 +16,9 @@ export async function tokenizeAsset(
         ? assetData.description.substring(0, 100)
         : "", // Limit description
       imageUrl: assetData.imageUrl || "",
+      value: assetData.value, // Make sure we include the value
+      currency: assetData.currency, // Make sure we include the currency
+      owner: wallet.address,
     };
 
     // Convert metadata to hex - keeping it small
@@ -80,16 +83,6 @@ export async function tokenizeAsset(
     const nfts = nftsResponse.result.account_nfts;
     const lastNFT = nfts[nfts.length - 1];
 
-    // Now store complete asset data by updating the in-memory representation
-    // We can associate the asset data with the NFT ID in a database or local storage
-    const completeAsset = {
-      ...assetData,
-      tokenId: lastNFT.NFTokenID,
-    };
-
-    // This would be where you'd store the complete asset data in a database
-    console.log("Tokenized asset:", completeAsset);
-
     return {
       success: true,
       tokenId: lastNFT.NFTokenID,
@@ -136,13 +129,14 @@ export async function getTokenizedAssets(
             const parsedData = JSON.parse(rawData);
 
             // Build a complete asset with default values for missing fields
+            // But prioritize the stored values for currency and value
             return {
               tokenId: nft.NFTokenID,
               name:
                 parsedData.name || `Token ${nft.NFTokenID.substring(0, 8)}...`,
               type: parsedData.type || "Unknown",
               description: parsedData.description || "",
-              value: parsedData.value || 0,
+              value: parsedData.value !== undefined ? parsedData.value : 0,
               currency: parsedData.currency || "XRP",
               imageUrl: parsedData.imageUrl || "",
               owner: address, // Set owner to the current address
@@ -152,6 +146,7 @@ export async function getTokenizedAssets(
             } as Asset & { tokenId: string };
           } catch (parseError) {
             // If JSON parsing fails, use raw data
+            console.error("Error parsing NFT data:", parseError);
             return {
               tokenId: nft.NFTokenID,
               name: `Token ${nft.NFTokenID.substring(0, 8)}...`,
